@@ -22,3 +22,5 @@ version = 0.1
 
 [buildozer]
 log_level = 2
+
+# force rebuild
