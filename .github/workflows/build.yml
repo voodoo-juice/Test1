@@ -36,10 +36,11 @@ jobs:
 
     - name: Build with Buildozer
       run: |
-        buildozer -v android debug
+        buildozer --clean -v android debug
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: package-apk
         path: bin/*.apk
+        
