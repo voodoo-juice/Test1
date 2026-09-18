@@ -2,45 +2,57 @@ name: CI Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y \
-          git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev \
-          libssl-dev ccache lld libltdl-dev libltdl7 \
-          build-essential libffi-dev libssl-dev
-        sudo dpkg --add-architecture i386
-        sudo apt update
-        sudo apt install -y zlib1g:i386 libstdc++6:i386
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            python3-pip \
+            python3-setuptools \
+            python3-wheel \
+            libltdl-dev \
+            libffi-dev \
+            libssl-dev \
+            zlib1g-dev \
+            openjdk-17-jdk \
+            autoconf \
+            libtool \
+            pkg-config \
+            unzip \
+            zip
 
-    - name: Install Buildozer and Cython
-      run: |
-        pip install --upgrade pip
-        pip install "cython<3.0"
-        pip install buildozer
+      - name: Install Buildozer and Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install cython==0.29.36
+          pip install buildozer
+          pip install git+https://github.com/kivy/python-for-android.git
 
-    - name: Build with Buildozer
-      run: |
-        buildozer --clean -v android debug
+      - name: Build with Buildozer
+        run: |
+          rm -rf .buildozer
+          buildozer -v android debug
 
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: package-apk
-        path: bin/*.apk
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-apk
+          path: bin/*.apk
