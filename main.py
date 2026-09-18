@@ -17,7 +17,8 @@ from kivy.clock import Clock
 # НАСТРОЙКИ СЕРВЕРА
 # ============================================================
 
-SERVER_URL = "https://your-forum-server.com"
+SERVER_URL = "https://6aad5eb7a2413bf0ec119cf8.mockapi.io/api"
+
 
 LOGIN_URL = SERVER_URL + "/api/login"
 MESSAGE_URL = SERVER_URL + "/api/message"
