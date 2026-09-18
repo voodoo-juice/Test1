@@ -8,9 +8,8 @@ source.include_exts = py,png,jpg,kv,atlas
 source.main = main.py
 requirements = python3,kivy
 
-# Явное указание bootstrap и стабильных параметров
-requirements.source.kivy = 
-android.bootstrap = sdl2
+# Актуальные настройки без устаревших параметров
+p4a.bootstrap = sdl2
 android.api = 33
 android.minapi = 21
 android.sdk = 33
