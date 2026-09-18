@@ -1,7 +1,5 @@
 import os
 import json
-import hashlib
-import threading
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -9,7 +7,6 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
@@ -18,8 +15,10 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 
 
 # ============================================================
-# НАСТРОЙКИ
+# НАСТРОЙКИ ПРИЛОЖЕНИЯ
 # ============================================================
+
+APP_NAME = "Forum"
 
 Window.size = (400, 700)
 
@@ -51,11 +50,10 @@ RED_LIGHT = (1.0, 0.16, 0.16, 1)
 
 TEXT = (0.92, 0.92, 0.92, 1)
 GRAY = (0.55, 0.55, 0.55, 1)
-GREEN = (0.25, 0.9, 0.3, 1)
 
 
 # ============================================================
-# БАЗА ДАННЫХ
+# НАЧАЛЬНАЯ БАЗА
 # ============================================================
 
 DEFAULT_DATA = {
@@ -100,14 +98,14 @@ DEFAULT_DATA = {
         {
             "id": 1,
             "section_id": 1,
-            "title": "Добро пожаловать!",
+            "title": "Добро пожаловать на Forum!",
             "author": "admin",
             "replies": 2
         },
         {
             "id": 2,
             "section_id": 2,
-            "title": "Обсуждение Kivy",
+            "title": "Обсуждение Kivy и Android",
             "author": "admin",
             "replies": 1
         }
@@ -139,13 +137,45 @@ DEFAULT_DATA = {
 }
 
 
+# ============================================================
+# РАБОТА С ДАННЫМИ
+# ============================================================
+
+def save_data(data):
+
+    try:
+        with open(
+            DATA_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                data,
+                file,
+                ensure_ascii=False,
+                indent=4
+            )
+
+    except Exception as error:
+
+        print(
+            "Ошибка сохранения:",
+            error
+        )
+
+
 def load_data():
 
     if not os.path.exists(DATA_FILE):
 
-        save_data(DEFAULT_DATA)
+        data = json.loads(
+            json.dumps(DEFAULT_DATA)
+        )
 
-        return DEFAULT_DATA.copy()
+        save_data(data)
+
+        return data
 
     try:
 
@@ -153,31 +183,19 @@ def load_data():
             DATA_FILE,
             "r",
             encoding="utf-8"
-        ) as f:
+        ) as file:
 
-            return json.load(f)
+            return json.load(file)
 
     except Exception:
 
-        save_data(DEFAULT_DATA)
-
-        return DEFAULT_DATA.copy()
-
-
-def save_data(data):
-
-    with open(
-        DATA_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            data,
-            f,
-            ensure_ascii=False,
-            indent=4
+        data = json.loads(
+            json.dumps(DEFAULT_DATA)
         )
+
+        save_data(data)
+
+        return data
 
 
 # ============================================================
@@ -186,17 +204,26 @@ def save_data(data):
 
 def save_session(username):
 
-    with open(
-        SESSION_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
+    try:
 
-        json.dump(
-            {
-                "username": username
-            },
-            f
+        with open(
+            SESSION_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                {
+                    "username": username
+                },
+                file
+            )
+
+    except Exception as error:
+
+        print(
+            "Ошибка сохранения сессии:",
+            error
         )
 
 
@@ -211,9 +238,9 @@ def load_session():
             SESSION_FILE,
             "r",
             encoding="utf-8"
-        ) as f:
+        ) as file:
 
-            return json.load(f)
+            return json.load(file)
 
     except Exception:
 
@@ -226,6 +253,7 @@ def clear_session():
 
         try:
             os.remove(SESSION_FILE)
+
         except Exception:
             pass
 
@@ -258,7 +286,10 @@ class ColoredBox(BoxLayout):
             size=self.update_rect
         )
 
-    def update_rect(self, *args):
+    def update_rect(
+        self,
+        *args
+    ):
 
         self.rect.pos = self.pos
         self.rect.size = self.size
@@ -270,7 +301,10 @@ class ColoredBox(BoxLayout):
 
 class ForumButton(Button):
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        **kwargs
+    ):
 
         super().__init__(**kwargs)
 
@@ -295,7 +329,10 @@ class ForumButton(Button):
             size=self.update_text
         )
 
-    def update_text(self, *args):
+    def update_text(
+        self,
+        *args
+    ):
 
         self.text_size = (
             self.width - dp(30),
@@ -304,12 +341,15 @@ class ForumButton(Button):
 
 
 # ============================================================
-# INPUT
+# ПОЛЕ ВВОДА
 # ============================================================
 
 class DarkInput(TextInput):
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        **kwargs
+    ):
 
         super().__init__(**kwargs)
 
@@ -328,13 +368,15 @@ class DarkInput(TextInput):
 
 
 # ============================================================
-# СООБЩЕНИЕ
+# ВСПЛЫВАЮЩЕЕ ОКНО
 # ============================================================
 
 def show_message(
     title,
     message
 ):
+
+    from kivy.uix.popup import Popup
 
     root = ColoredBox(
         orientation="vertical",
@@ -359,10 +401,7 @@ def show_message(
     )
 
     root.add_widget(label)
-
     root.add_widget(close)
-
-    from kivy.uix.popup import Popup
 
     popup = Popup(
         title=title,
@@ -379,12 +418,15 @@ def show_message(
 
 
 # ============================================================
-# LOGIN
+# ЭКРАН ВХОДА
 # ============================================================
 
 class LoginScreen(Screen):
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        **kwargs
+    ):
 
         super().__init__(**kwargs)
 
@@ -395,16 +437,16 @@ class LoginScreen(Screen):
         )
 
         title = Label(
-            text="[b]UNDERGROUND FORUM[/b]",
+            text="[b]FORUM[/b]",
             markup=True,
-            font_size=dp(25),
+            font_size=dp(30),
             color=RED_LIGHT,
             size_hint_y=None,
-            height=dp(65)
+            height=dp(70)
         )
 
         subtitle = Label(
-            text="ЗАКРЫТОЕ СООБЩЕСТВО",
+            text="СООБЩЕСТВО",
             color=GRAY,
             size_hint_y=None,
             height=dp(30)
@@ -466,7 +508,10 @@ class LoginScreen(Screen):
             )
         )
 
-    def login(self, instance):
+    def login(
+        self,
+        instance
+    ):
 
         username = self.username.text.strip()
 
@@ -511,12 +556,15 @@ class LoginScreen(Screen):
 
 
 # ============================================================
-# REGISTER
+# РЕГИСТРАЦИЯ
 # ============================================================
 
 class RegisterScreen(Screen):
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        **kwargs
+    ):
 
         super().__init__(**kwargs)
 
@@ -595,7 +643,10 @@ class RegisterScreen(Screen):
             )
         )
 
-    def register(self, instance):
+    def register(
+        self,
+        instance
+    ):
 
         username = self.username.text.strip()
 
@@ -606,7 +657,7 @@ class RegisterScreen(Screen):
         if len(username) < 3:
 
             self.status.text = (
-                "Логин должен быть минимум 3 символа."
+                "Логин минимум 3 символа."
             )
 
             return
@@ -614,7 +665,7 @@ class RegisterScreen(Screen):
         if len(password) < 4:
 
             self.status.text = (
-                "Пароль должен быть минимум 4 символа."
+                "Пароль минимум 4 символа."
             )
 
             return
@@ -631,7 +682,11 @@ class RegisterScreen(Screen):
 
         for user in data["users"]:
 
-            if user["username"].lower() == username.lower():
+            if (
+                user["username"].lower()
+                ==
+                username.lower()
+            ):
 
                 self.status.text = (
                     "Такой пользователь уже существует."
@@ -659,26 +714,29 @@ class RegisterScreen(Screen):
 
         save_data(data)
 
-        show_message(
-            "Готово",
-            "Аккаунт создан.\n\n"
-            "Теперь можно войти."
-        )
-
         self.username.text = ""
         self.password.text = ""
         self.password2.text = ""
+
+        show_message(
+            "FORUM",
+            "Аккаунт создан!\n\n"
+            "Теперь можно войти."
+        )
 
         self.manager.current = "login"
 
 
 # ============================================================
-# ФОРУМ
+# ГЛАВНАЯ ФОРУМА
 # ============================================================
 
 class ForumScreen(Screen):
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        **kwargs
+    ):
 
         super().__init__(**kwargs)
 
@@ -694,16 +752,16 @@ class ForumScreen(Screen):
         )
 
         title = Label(
-            text="[b]UNDERGROUND[/b]",
+            text="[b]FORUM[/b]",
             markup=True,
-            font_size=dp(22),
+            font_size=dp(24),
             color=RED_LIGHT
         )
 
         profile = Button(
             text="ПРОФИЛЬ",
             size_hint_x=None,
-            width=dp(100),
+            width=dp(105),
             background_normal="",
             background_color=PANEL2_COLOR,
             color=TEXT
@@ -724,7 +782,9 @@ class ForumScreen(Screen):
 
         self.list_layout.bind(
             minimum_height=
-            self.list_layout.setter("height")
+            self.list_layout.setter(
+                "height"
+            )
         )
 
         self.scroll.add_widget(
@@ -845,7 +905,10 @@ class ForumScreen(Screen):
                 button
             )
 
-    def open_section(self, section):
+    def open_section(
+        self,
+        section
+    ):
 
         screen = self.manager.get_screen(
             "threads"
@@ -860,12 +923,15 @@ class ForumScreen(Screen):
 
 
 # ============================================================
-# ТЕМЫ
+# СПИСОК ТЕМ
 # ============================================================
 
 class ThreadScreen(Screen):
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        **kwargs
+    ):
 
         super().__init__(**kwargs)
 
@@ -905,7 +971,9 @@ class ThreadScreen(Screen):
 
         self.list_layout.bind(
             minimum_height=
-            self.list_layout.setter("height")
+            self.list_layout.setter(
+                "height"
+            )
         )
 
         self.scroll.add_widget(
@@ -923,54 +991,4 @@ class ThreadScreen(Screen):
             setattr(
                 self.manager,
                 "current",
-                "forum"
-            )
-        )
-
-    def load_threads(
-        self,
-        section_id,
-        title
-    ):
-
-        self.section_id = section_id
-
-        self.title.text = (
-            "[b]"
-            + title
-            + "[/b]"
-        )
-
-        self.list_layout.clear_widgets()
-
-        create = Button(
-            text="+ СОЗДАТЬ НОВУЮ ТЕМУ",
-            size_hint_y=None,
-            height=dp(48),
-            background_normal="",
-            background_color=RED,
-            color=TEXT
-        )
-
-        self.list_layout.add_widget(
-            create
-        )
-
-        create.bind(
-            on_release=lambda x:
-            self.open_create()
-        )
-
-        data = load_data()
-
-        found = False
-
-        for thread in data["threads"]:
-
-            if (
-                thread["section_id"]
-                ==
-                section_id
-            ):
-
-                found 
+              
