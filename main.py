@@ -1,569 +1,976 @@
 import os
-import ssl
+import json
+import hashlib
 import threading
-import requests
 
 from kivy.app import App
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.metrics import dp
+from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.clock import Clock
 
 
 # ============================================================
-# НАСТРОЙКИ СЕРВЕРА
+# НАСТРОЙКИ
 # ============================================================
 
-SERVER_URL = "https://6aad5eb7a2413bf0ec119cf8.mockapi.io/api"
+Window.size = (400, 700)
 
+APP_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
 
-LOGIN_URL = SERVER_URL + "/api/login"
-MESSAGE_URL = SERVER_URL + "/api/message"
+DATA_FILE = os.path.join(
+    APP_DIR,
+    "forum_data.json"
+)
+
+SESSION_FILE = os.path.join(
+    APP_DIR,
+    "session.json"
+)
 
 
 # ============================================================
-# ANDROID FLAG_SECURE
-# Запрещает обычные скриншоты и запись экрана приложения
+# ЦВЕТА
 # ============================================================
 
-def enable_secure_screen():
+BG_COLOR = (0.045, 0.045, 0.045, 1)
+PANEL_COLOR = (0.105, 0.085, 0.085, 1)
+PANEL2_COLOR = (0.15, 0.12, 0.12, 1)
+
+RED = (0.72, 0.04, 0.04, 1)
+RED_LIGHT = (1.0, 0.16, 0.16, 1)
+
+TEXT = (0.92, 0.92, 0.92, 1)
+GRAY = (0.55, 0.55, 0.55, 1)
+GREEN = (0.25, 0.9, 0.3, 1)
+
+
+# ============================================================
+# БАЗА ДАННЫХ
+# ============================================================
+
+DEFAULT_DATA = {
+    "users": [
+        {
+            "id": 1,
+            "username": "admin",
+            "password": "admin123",
+            "role": "admin"
+        }
+    ],
+
+    "sections": [
+        {
+            "id": 1,
+            "title": "Общий раздел",
+            "description": "Общие обсуждения"
+        },
+        {
+            "id": 2,
+            "title": "Разработка & APK",
+            "description": "Python, Kivy, Android и разработка"
+        },
+        {
+            "id": 3,
+            "title": "Безопасность",
+            "description": "Сети, защита и приватность"
+        },
+        {
+            "id": 4,
+            "title": "Торговля / Обмен",
+            "description": "Объявления и обмен"
+        },
+        {
+            "id": 5,
+            "title": "Оффтоп",
+            "description": "Свободное общение"
+        }
+    ],
+
+    "threads": [
+        {
+            "id": 1,
+            "section_id": 1,
+            "title": "Добро пожаловать!",
+            "author": "admin",
+            "replies": 2
+        },
+        {
+            "id": 2,
+            "section_id": 2,
+            "title": "Обсуждение Kivy",
+            "author": "admin",
+            "replies": 1
+        }
+    ],
+
+    "messages": [
+        {
+            "id": 1,
+            "thread_id": 1,
+            "username": "admin",
+            "text": "Добро пожаловать на форум!",
+            "date": "Сегодня"
+        },
+        {
+            "id": 2,
+            "thread_id": 1,
+            "username": "admin",
+            "text": "Здесь можно создавать темы и отвечать.",
+            "date": "Сегодня"
+        },
+        {
+            "id": 3,
+            "thread_id": 2,
+            "username": "admin",
+            "text": "Обсуждаем разработку приложений на Kivy.",
+            "date": "Сегодня"
+        }
+    ]
+}
+
+
+def load_data():
+
+    if not os.path.exists(DATA_FILE):
+
+        save_data(DEFAULT_DATA)
+
+        return DEFAULT_DATA.copy()
+
     try:
-        from jnius import autoclass
 
-        PythonActivity = autoclass(
-            "org.kivy.android.PythonActivity"
-        )
+        with open(
+            DATA_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
 
-        activity = PythonActivity.mActivity
-        window = activity.getWindow()
-
-        WindowManager = autoclass(
-            "android.view.WindowManager$LayoutParams"
-        )
-
-        window.setFlags(
-            WindowManager.FLAG_SECURE,
-            WindowManager.FLAG_SECURE
-        )
-
-        return True
+            return json.load(f)
 
     except Exception:
-        return False
+
+        save_data(DEFAULT_DATA)
+
+        return DEFAULT_DATA.copy()
 
 
-# ============================================================
-# HTTPS / SSL
-# ============================================================
+def save_data(data):
 
-class StrictHTTPSAdapter(requests.adapters.HTTPAdapter):
+    with open(
+        DATA_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
 
-    def init_poolmanager(self, *args, **kwargs):
-
-        context = ssl.create_default_context()
-
-        cert_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "server_cert.pem"
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=4
         )
 
-        if not os.path.isfile(cert_path):
-            raise FileNotFoundError(
-                "Файл server_cert.pem не найден. "
-                "Соединение заблокировано."
+
+# ============================================================
+# СЕССИЯ
+# ============================================================
+
+def save_session(username):
+
+    with open(
+        SESSION_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            {
+                "username": username
+            },
+            f
+        )
+
+
+def load_session():
+
+    if not os.path.exists(SESSION_FILE):
+        return None
+
+    try:
+
+        with open(
+            SESSION_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            return json.load(f)
+
+    except Exception:
+
+        return None
+
+
+def clear_session():
+
+    if os.path.exists(SESSION_FILE):
+
+        try:
+            os.remove(SESSION_FILE)
+        except Exception:
+            pass
+
+
+# ============================================================
+# ФОН
+# ============================================================
+
+class ColoredBox(BoxLayout):
+
+    def __init__(
+        self,
+        bg_color=BG_COLOR,
+        **kwargs
+    ):
+
+        super().__init__(**kwargs)
+
+        with self.canvas.before:
+
+            Color(*bg_color)
+
+            self.rect = Rectangle(
+                pos=self.pos,
+                size=self.size
             )
 
-        context.load_verify_locations(
-            cafile=cert_path
+        self.bind(
+            pos=self.update_rect,
+            size=self.update_rect
         )
 
-        kwargs["ssl_context"] = context
+    def update_rect(self, *args):
 
-        return super().init_poolmanager(
-            *args,
-            **kwargs
-        )
-
-
-def create_secure_session():
-
-    session = requests.Session()
-
-    session.mount(
-        "https://",
-        StrictHTTPSAdapter()
-    )
-
-    return session
+        self.rect.pos = self.pos
+        self.rect.size = self.size
 
 
 # ============================================================
-# ЭКРАН ВХОДА
+# КНОПКА
+# ============================================================
+
+class ForumButton(Button):
+
+    def __init__(self, **kwargs):
+
+        super().__init__(**kwargs)
+
+        self.background_normal = ""
+
+        self.background_color = PANEL2_COLOR
+
+        self.color = TEXT
+
+        self.font_size = dp(15)
+
+        self.halign = "left"
+
+        self.valign = "middle"
+
+        self.padding = (
+            dp(15),
+            dp(10)
+        )
+
+        self.bind(
+            size=self.update_text
+        )
+
+    def update_text(self, *args):
+
+        self.text_size = (
+            self.width - dp(30),
+            None
+        )
+
+
+# ============================================================
+# INPUT
+# ============================================================
+
+class DarkInput(TextInput):
+
+    def __init__(self, **kwargs):
+
+        super().__init__(**kwargs)
+
+        self.background_color = PANEL2_COLOR
+
+        self.foreground_color = TEXT
+
+        self.cursor_color = RED_LIGHT
+
+        self.padding = [
+            dp(12),
+            dp(12)
+        ]
+
+        self.multiline = False
+
+
+# ============================================================
+# СООБЩЕНИЕ
+# ============================================================
+
+def show_message(
+    title,
+    message
+):
+
+    root = ColoredBox(
+        orientation="vertical",
+        padding=dp(15),
+        spacing=dp(15)
+    )
+
+    label = Label(
+        text=message,
+        color=TEXT,
+        halign="center",
+        valign="middle"
+    )
+
+    close = Button(
+        text="ЗАКРЫТЬ",
+        size_hint_y=None,
+        height=dp(45),
+        background_normal="",
+        background_color=RED,
+        color=TEXT
+    )
+
+    root.add_widget(label)
+
+    root.add_widget(close)
+
+    from kivy.uix.popup import Popup
+
+    popup = Popup(
+        title=title,
+        content=root,
+        size_hint=(0.9, 0.4),
+        separator_color=RED
+    )
+
+    close.bind(
+        on_release=popup.dismiss
+    )
+
+    popup.open()
+
+
+# ============================================================
+# LOGIN
 # ============================================================
 
 class LoginScreen(Screen):
 
     def __init__(self, **kwargs):
+
         super().__init__(**kwargs)
 
-        layout = BoxLayout(
+        root = ColoredBox(
             orientation="vertical",
-            padding=40,
-            spacing=15
+            padding=dp(25),
+            spacing=dp(12)
         )
 
         title = Label(
-            text="[b]Закрытый корпоративный контур[/b]",
+            text="[b]UNDERGROUND FORUM[/b]",
             markup=True,
-            font_size=22,
+            font_size=dp(25),
+            color=RED_LIGHT,
             size_hint_y=None,
-            height=60
+            height=dp(65)
         )
 
-        layout.add_widget(title)
-
-        self.user_input = TextInput(
-            hint_text="Корпоративный логин",
-            multiline=False,
+        subtitle = Label(
+            text="ЗАКРЫТОЕ СООБЩЕСТВО",
+            color=GRAY,
             size_hint_y=None,
-            height=55
+            height=dp(30)
         )
 
-        layout.add_widget(self.user_input)
+        self.username = DarkInput(
+            hint_text="Логин"
+        )
 
-        self.pass_input = TextInput(
+        self.password = DarkInput(
             hint_text="Пароль",
-            password=True,
-            multiline=False,
+            password=True
+        )
+
+        login = Button(
+            text="ВОЙТИ",
             size_hint_y=None,
-            height=55
+            height=dp(52),
+            background_normal="",
+            background_color=RED,
+            color=TEXT
         )
 
-        layout.add_widget(self.pass_input)
-
-        self.login_button = Button(
-            text="Войти в систему",
+        register = Button(
+            text="РЕГИСТРАЦИЯ",
             size_hint_y=None,
-            height=55
+            height=dp(45),
+            background_normal="",
+            background_color=PANEL2_COLOR,
+            color=RED_LIGHT
         )
 
-        self.login_button.bind(
-            on_press=self.do_login
-        )
-
-        layout.add_widget(self.login_button)
-
-        self.status_label = Label(
+        self.status = Label(
             text="",
-            halign="center",
-            valign="middle"
+            color=RED_LIGHT,
+            halign="center"
         )
 
-        layout.add_widget(
-            self.status_label
+        root.add_widget(title)
+        root.add_widget(subtitle)
+        root.add_widget(self.username)
+        root.add_widget(self.password)
+        root.add_widget(login)
+        root.add_widget(register)
+        root.add_widget(self.status)
+
+        self.add_widget(root)
+
+        login.bind(
+            on_release=self.login
         )
 
-        self.add_widget(layout)
+        register.bind(
+            on_release=lambda x:
+            setattr(
+                self.manager,
+                "current",
+                "register"
+            )
+        )
 
+    def login(self, instance):
 
-    def do_login(self, instance):
+        username = self.username.text.strip()
 
-        username = self.user_input.text.strip()
-        password = self.pass_input.text
+        password = self.password.text
 
         if not username or not password:
 
-            self.status_label.text = (
+            self.status.text = (
                 "Введите логин и пароль."
             )
 
             return
 
-        self.login_button.disabled = True
+        data = load_data()
 
-        self.status_label.text = (
-            "Проверка учетных данных..."
+        for user in data["users"]:
+
+            if (
+                user["username"] == username
+                and
+                user["password"] == password
+            ):
+
+                save_session(username)
+
+                self.username.text = ""
+                self.password.text = ""
+
+                forum = self.manager.get_screen(
+                    "forum"
+                )
+
+                forum.refresh()
+
+                self.manager.current = "forum"
+
+                return
+
+        self.status.text = (
+            "Неверный логин или пароль."
         )
-
-        thread = threading.Thread(
-            target=self.login_request,
-            args=(username, password),
-            daemon=True
-        )
-
-        thread.start()
-
-
-    def login_request(self, username, password):
-
-        try:
-
-            session = create_secure_session()
-
-            response = session.post(
-                LOGIN_URL,
-                json={
-                    "username": username,
-                    "password": password
-                },
-                timeout=10
-            )
-
-            if response.status_code == 200:
-
-                try:
-                    data = response.json()
-                except Exception:
-                    data = {}
-
-                token = data.get("token")
-
-                if not token:
-
-                    Clock.schedule_once(
-                        lambda dt: self.login_failed(
-                            "Сервер не вернул токен."
-                        )
-                    )
-
-                    return
-
-                app = App.get_running_app()
-
-                app.auth_token = token
-
-                Clock.schedule_once(
-                    lambda dt: self.login_success()
-                )
-
-            elif response.status_code in (401, 403):
-
-                Clock.schedule_once(
-                    lambda dt: self.login_failed(
-                        "Неверный логин или пароль."
-                    )
-                )
-
-            else:
-
-                Clock.schedule_once(
-                    lambda dt: self.login_failed(
-                        "Сервер вернул ошибку: "
-                        + str(response.status_code)
-                    )
-                )
-
-        except Exception as e:
-
-            Clock.schedule_once(
-                lambda dt: self.login_failed(
-                    "Ошибка соединения:\n" + str(e)
-                )
-            )
-
-
-    def login_success(self):
-
-        self.login_button.disabled = False
-
-        self.pass_input.text = ""
-
-        self.status_label.text = ""
-
-        self.manager.current = "workspace"
-
-
-    def login_failed(self, message):
-
-        self.login_button.disabled = False
-
-        self.status_label.text = message
 
 
 # ============================================================
-# РАБОЧИЙ ЭКРАН
+# REGISTER
 # ============================================================
 
-class WorkspaceScreen(Screen):
+class RegisterScreen(Screen):
 
     def __init__(self, **kwargs):
+
         super().__init__(**kwargs)
 
-        layout = BoxLayout(
+        root = ColoredBox(
             orientation="vertical",
-            padding=20,
-            spacing=12
+            padding=dp(25),
+            spacing=dp(12)
         )
 
         title = Label(
-            text="[b]Рабочий контур активен[/b]",
+            text="[b]РЕГИСТРАЦИЯ[/b]",
             markup=True,
-            font_size=20,
+            font_size=dp(23),
+            color=RED_LIGHT,
             size_hint_y=None,
-            height=50
+            height=dp(55)
         )
 
-        layout.add_widget(title)
+        self.username = DarkInput(
+            hint_text="Придумайте логин"
+        )
 
-        self.msg_input = TextInput(
-            hint_text="Введите сообщение...",
-            multiline=True,
+        self.password = DarkInput(
+            hint_text="Пароль",
+            password=True
+        )
+
+        self.password2 = DarkInput(
+            hint_text="Повторите пароль",
+            password=True
+        )
+
+        create = Button(
+            text="СОЗДАТЬ АККАУНТ",
             size_hint_y=None,
-            height=100
+            height=dp(50),
+            background_normal="",
+            background_color=RED,
+            color=TEXT
         )
 
-        layout.add_widget(
-            self.msg_input
-        )
-
-        self.send_button = Button(
-            text="Отправить в закрытый контур",
+        back = Button(
+            text="< НАЗАД",
             size_hint_y=None,
-            height=55
+            height=dp(42),
+            background_normal="",
+            background_color=PANEL2_COLOR,
+            color=RED_LIGHT
         )
 
-        self.send_button.bind(
-            on_press=self.send_message
+        self.status = Label(
+            text="",
+            color=RED_LIGHT
         )
 
-        layout.add_widget(
-            self.send_button
+        root.add_widget(title)
+        root.add_widget(self.username)
+        root.add_widget(self.password)
+        root.add_widget(self.password2)
+        root.add_widget(create)
+        root.add_widget(back)
+        root.add_widget(self.status)
+
+        self.add_widget(root)
+
+        create.bind(
+            on_release=self.register
         )
 
-        scroll = ScrollView()
-
-        self.output_label = Label(
-            text="Статус: готов к работе.",
-            halign="left",
-            valign="top",
-            size_hint_y=None,
-            markup=True
-        )
-
-        self.output_label.bind(
-            texture_size=self.output_label.setter(
-                "size"
+        back.bind(
+            on_release=lambda x:
+            setattr(
+                self.manager,
+                "current",
+                "login"
             )
         )
 
-        scroll.add_widget(
-            self.output_label
-        )
+    def register(self, instance):
 
-        layout.add_widget(
-            scroll
-        )
+        username = self.username.text.strip()
 
-        logout_button = Button(
-            text="Выйти",
-            size_hint_y=None,
-            height=50
-        )
+        password = self.password.text
 
-        logout_button.bind(
-            on_press=self.logout
-        )
+        password2 = self.password2.text
 
-        layout.add_widget(
-            logout_button
-        )
+        if len(username) < 3:
 
-        self.add_widget(layout)
-
-
-    def send_message(self, instance):
-
-        app = App.get_running_app()
-
-        if not app.auth_token:
-
-            self.output_label.text = (
-                "[color=ff3333]"
-                "Ошибка: пользователь не авторизован."
-                "[/color]"
+            self.status.text = (
+                "Логин должен быть минимум 3 символа."
             )
 
             return
 
-        message = self.msg_input.text.strip()
+        if len(password) < 4:
 
-        if not message:
-
-            self.output_label.text = (
-                "Введите сообщение."
+            self.status.text = (
+                "Пароль должен быть минимум 4 символа."
             )
 
             return
 
-        self.send_button.disabled = True
+        if password != password2:
 
-        self.output_label.text = (
-            "Отправка сообщения..."
-        )
+            self.status.text = (
+                "Пароли не совпадают."
+            )
 
-        thread = threading.Thread(
-            target=self.message_request,
-            args=(message,),
-            daemon=True
-        )
+            return
 
-        thread.start()
+        data = load_data()
 
+        for user in data["users"]:
 
-    def message_request(self, message):
+            if user["username"].lower() == username.lower():
 
-        try:
+                self.status.text = (
+                    "Такой пользователь уже существует."
+                )
 
-            app = App.get_running_app()
+                return
 
-            session = create_secure_session()
+        new_id = 1
 
-            headers = {
-                "Authorization":
-                    "Bearer " + app.auth_token
+        for user in data["users"]:
+
+            new_id = max(
+                new_id,
+                user["id"] + 1
+            )
+
+        data["users"].append(
+            {
+                "id": new_id,
+                "username": username,
+                "password": password,
+                "role": "user"
             }
-
-            response = session.post(
-                MESSAGE_URL,
-                json={
-                    "payload": message
-                },
-                headers=headers,
-                timeout=10
-            )
-
-            if response.status_code == 200:
-
-                try:
-                    server_answer = response.text
-                except Exception:
-                    server_answer = "OK"
-
-                Clock.schedule_once(
-                    lambda dt: self.message_success(
-                        server_answer
-                    )
-                )
-
-            elif response.status_code == 401:
-
-                Clock.schedule_once(
-                    lambda dt: self.session_expired()
-                )
-
-            else:
-
-                Clock.schedule_once(
-                    lambda dt: self.message_error(
-                        "Сервер вернул HTTP "
-                        + str(response.status_code)
-                    )
-                )
-
-        except Exception as e:
-
-            Clock.schedule_once(
-                lambda dt: self.message_error(
-                    str(e)
-                )
-            )
-
-
-    def message_success(self, answer):
-
-        self.send_button.disabled = False
-
-        self.output_label.text = (
-            "[color=33ff33]"
-            "[b]Сообщение успешно отправлено![/b]"
-            "[/color]\n\n"
-            "Ответ сервера:\n"
-            + answer
         )
 
-        self.msg_input.text = ""
+        save_data(data)
 
-
-    def message_error(self, error):
-
-        self.send_button.disabled = False
-
-        self.output_label.text = (
-            "[color=ff3333]"
-            "[b]Ошибка отправки[/b]"
-            "[/color]\n\n"
-            + error
+        show_message(
+            "Готово",
+            "Аккаунт создан.\n\n"
+            "Теперь можно войти."
         )
 
-
-    def session_expired(self):
-
-        self.send_button.disabled = False
-
-        app = App.get_running_app()
-
-        app.auth_token = None
-
-        self.output_label.text = (
-            "Сессия закончилась. "
-            "Войдите снова."
-        )
-
-        self.manager.current = "login"
-
-
-    def logout(self, instance):
-
-        app = App.get_running_app()
-
-        app.auth_token = None
-
-        self.msg_input.text = ""
-
-        self.output_label.text = (
-            "Статус: выполнен выход."
-        )
+        self.username.text = ""
+        self.password.text = ""
+        self.password2.text = ""
 
         self.manager.current = "login"
 
 
 # ============================================================
-# ГЛАВНОЕ ПРИЛОЖЕНИЕ
+# ФОРУМ
 # ============================================================
 
-class SecureCorporateApp(App):
+class ForumScreen(Screen):
 
-    auth_token = None
+    def __init__(self, **kwargs):
 
-    def build(self):
+        super().__init__(**kwargs)
 
-        self.title = "SecureCorp Client"
+        root = ColoredBox(
+            orientation="vertical",
+            padding=dp(12),
+            spacing=dp(10)
+        )
 
-        enable_secure_screen()
+        header = BoxLayout(
+            size_hint_y=None,
+            height=dp(55)
+        )
 
-        manager = ScreenManager()
+        title = Label(
+            text="[b]UNDERGROUND[/b]",
+            markup=True,
+            font_size=dp(22),
+            color=RED_LIGHT
+        )
 
-        manager.add_widget(
-            LoginScreen(
-                name="login"
+        profile = Button(
+            text="ПРОФИЛЬ",
+            size_hint_x=None,
+            width=dp(100),
+            background_normal="",
+            background_color=PANEL2_COLOR,
+            color=TEXT
+        )
+
+        header.add_widget(title)
+        header.add_widget(profile)
+
+        root.add_widget(header)
+
+        self.scroll = ScrollView()
+
+        self.list_layout = BoxLayout(
+            orientation="vertical",
+            spacing=dp(10),
+            size_hint_y=None
+        )
+
+        self.list_layout.bind(
+            minimum_height=
+            self.list_layout.setter("height")
+        )
+
+        self.scroll.add_widget(
+            self.list_layout
+        )
+
+        root.add_widget(
+            self.scroll
+        )
+
+        self.add_widget(root)
+
+        profile.bind(
+            on_release=lambda x:
+            setattr(
+                self.manager,
+                "current",
+                "profile"
             )
         )
 
-        manager.add_widget(
-            WorkspaceScreen(
-                name="workspace"
+    def on_pre_enter(self):
+
+        self.refresh()
+
+    def refresh(self):
+
+        self.list_layout.clear_widgets()
+
+        data = load_data()
+
+        session = load_session()
+
+        if not session:
+            return
+
+        username = session["username"]
+
+        current_user = None
+
+        for user in data["users"]:
+
+            if user["username"] == username:
+
+                current_user = user
+
+                break
+
+        if (
+            current_user
+            and
+            current_user["role"] == "admin"
+        ):
+
+            admin = Button(
+                text="⚙ АДМИН-ПАНЕЛЬ",
+                size_hint_y=None,
+                height=dp(50),
+                background_normal="",
+                background_color=RED,
+                color=TEXT
+            )
+
+            self.list_layout.add_widget(
+                admin
+            )
+
+            admin.bind(
+                on_release=lambda x:
+                setattr(
+                    self.manager,
+                    "current",
+                    "admin"
+                )
+            )
+
+        for section in data["sections"]:
+
+            thread_count = 0
+
+            for thread in data["threads"]:
+
+                if (
+                    thread["section_id"]
+                    ==
+                    section["id"]
+                ):
+
+                    thread_count += 1
+
+            text = (
+                "[b]"
+                + section["title"]
+                + "[/b]\n"
+                "[size=12]"
+                + section["description"]
+                + "[/size]\n"
+                "[size=10]"
+                + "Тем: "
+                + str(thread_count)
+                + "[/size]"
+            )
+
+            button = ForumButton(
+                text=text,
+                markup=True,
+                size_hint_y=None,
+                height=dp(85)
+            )
+
+            button.bind(
+                on_release=
+                lambda x, s=section:
+                self.open_section(s)
+            )
+
+            self.list_layout.add_widget(
+                button
+            )
+
+    def open_section(self, section):
+
+        screen = self.manager.get_screen(
+            "threads"
+        )
+
+        screen.load_threads(
+            section["id"],
+            section["title"]
+        )
+
+        self.manager.current = "threads"
+
+
+# ============================================================
+# ТЕМЫ
+# ============================================================
+
+class ThreadScreen(Screen):
+
+    def __init__(self, **kwargs):
+
+        super().__init__(**kwargs)
+
+        self.section_id = None
+
+        root = ColoredBox(
+            orientation="vertical",
+            padding=dp(12),
+            spacing=dp(10)
+        )
+
+        back = Button(
+            text="< РАЗДЕЛЫ",
+            size_hint_y=None,
+            height=dp(42),
+            background_normal="",
+            background_color=PANEL2_COLOR,
+            color=RED_LIGHT
+        )
+
+        self.title = Label(
+            text="Раздел",
+            markup=True,
+            font_size=dp(20),
+            color=TEXT,
+            size_hint_y=None,
+            height=dp(45)
+        )
+
+        self.scroll = ScrollView()
+
+        self.list_layout = BoxLayout(
+            orientation="vertical",
+            spacing=dp(10),
+            size_hint_y=None
+        )
+
+        self.list_layout.bind(
+            minimum_height=
+            self.list_layout.setter("height")
+        )
+
+        self.scroll.add_widget(
+            self.list_layout
+        )
+
+        root.add_widget(back)
+        root.add_widget(self.title)
+        root.add_widget(self.scroll)
+
+        self.add_widget(root)
+
+        back.bind(
+            on_release=lambda x:
+            setattr(
+                self.manager,
+                "current",
+                "forum"
             )
         )
 
-        return manager
+    def load_threads(
+        self,
+        section_id,
+        title
+    ):
 
+        self.section_id = section_id
 
-# ============================================================
-# ЗАПУСК
-# ============================================================
+        self.title.text = (
+            "[b]"
+            + title
+            + "[/b]"
+        )
 
-if __name__ == "__main__":
-    SecureCorporateApp().run()
+        self.list_layout.clear_widgets()
+
+        create = Button(
+            text="+ СОЗДАТЬ НОВУЮ ТЕМУ",
+            size_hint_y=None,
+            height=dp(48),
+            background_normal="",
+            background_color=RED,
+            color=TEXT
+        )
+
+        self.list_layout.add_widget(
+            create
+        )
+
+        create.bind(
+            on_release=lambda x:
+            self.open_create()
+        )
+
+        data = load_data()
+
+        found = False
+
+        for thread in data["threads"]:
+
+            if (
+                thread["section_id"]
+                ==
+                section_id
+            ):
+
+                found 
