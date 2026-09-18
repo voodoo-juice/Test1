@@ -1,6 +1,6 @@
 [app]
 
-title = My App
+title = Forum
 package.name = myapp
 package.domain = org.test
 source.dir = .
