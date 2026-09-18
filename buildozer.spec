@@ -9,6 +9,9 @@ package.name = myapp
 # Домен пакета
 package.domain = org.test
 
+# Путь к исходному коду (точка означает корень репозитория)
+source.dir = .
+
 # Какие файлы включать в сборку
 source.include_exts = py,png,jpg,kv,atlas
 
