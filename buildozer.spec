@@ -1,7 +1,7 @@
 [app]
 
 title = Forum
-package.name = myapp
+package.name = forum
 package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
