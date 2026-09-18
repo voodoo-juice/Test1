@@ -6,7 +6,7 @@ package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 source.main = main.py
-requirements = python3,kivy
+requirements = python3,kivy,requests,urllib3,idna,charset-normalizer,certifi,pyjnius
 
 # Актуальные настройки и современные версии API/minapi для установки на свежие версии Android
 p4a.bootstrap = sdl2
